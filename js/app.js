@@ -1,16 +1,19 @@
 // Quickair HR — app entry: hash router, event delegation, form handling.
 // Hash routing (#/home) keeps every URL valid on GitHub Pages project sites without server rewrites.
 
-import { $, $$, esc, pad, todayISO, toast, addMonths, monthKey } from './utils.js';
-import { EMPLOYEES, ME_ID, LEAVE_LABEL } from './data.js';
+import { $, $$, esc, pad, todayISO, toast, addMonths, monthKey, initials } from './utils.js';
+import { EMPLOYEES, ME_ID, LEAVE_LABEL, DOC_TYPES } from './data.js';
 import { getState, update, subscribe, resetState, uid } from './store.js';
 import { countWorkingDays, leaveBalances } from './attendance.js';
 import { payslipHtml, letterHtml, printHtml } from './docs.js';
-import { buildPayslips } from './data.js';
+import {
+  importPayroll, unlockPayroll, lockPayroll, removePayroll, mapRow, payrollData, rowFor, onPayrollChange,
+} from './payroll.js';
 import { initPWA, pwa } from './pwa.js';
 import {
   ui, NAV, ICONS, pendingApprovals, homeView, timeView, leaveView, payView, moreView, peopleView,
   peopleListHtml, personView, requestsView, performanceView, skillsView, documentsView, policyDialogBody,
+  docAvailability,
 } from './views.js';
 
 const viewEl = $('#view');
@@ -23,7 +26,7 @@ function buildNav() {
   $('#side-nav').innerHTML = NAV.map((n) => n.sep ? '<div class="sep" role="separator"></div>'
     : n.mobile && n.desktopHidden ? '' : `<a href="#/${n.route}" data-route="${n.route}" aria-label="${n.label}">${ICONS[n.icon]}<span class="t">${n.label}</span>${n.route === 'requests' ? '<span class="dot" data-approvals hidden></span>' : ''}</a>`).join('');
   $('#tabbar').innerHTML = NAV.filter((n) => n.mobile).map((n) => `<a class="tab" href="#/${n.route}" data-route="${n.route}" aria-label="${n.label}">${ICONS[n.icon]}<span>${n.label}</span>${n.route === 'home' ? '<span class="dot" data-approvals hidden></span>' : ''}</a>`).join('');
-  $('#side-who').innerHTML = `<span class="avatar sm">${esc(user.name.split(' ').map((p) => p[0]).join(''))}</span><div>${esc(user.name)}<small>${esc(user.role)}</small></div>`;
+  $('#side-who').innerHTML = `<span class="avatar sm">${esc(initials(user.name))}</span><div>${esc(user.name)}<small>${esc(user.role || user.id)}</small></div>`;
 }
 
 function syncNav(route) {
@@ -48,7 +51,7 @@ const routes = {
   home: (s) => homeView(s),
   time: (s) => timeView(s),
   leave: (s) => leaveView(s),
-  pay: (s) => payView(s),
+  pay: () => payView(),
   more: (s) => moreView(s, { canInstall: pwa.canInstall, isIOS: pwa.isIOS, installed: pwa.installed }),
   people: (s, id) => (id ? personView(s, id) : peopleView(s)),
   requests: (s) => requestsView(s),
@@ -58,7 +61,7 @@ const routes = {
 };
 
 const titles = {
-  home: 'Home', time: 'Attendance', leave: 'Leave', pay: 'Payslips', more: 'More', people: 'People',
+  home: 'Home', time: 'Attendance', leave: 'Leave', pay: 'Payroll', more: 'More', people: 'People',
   requests: 'Requests', performance: 'Performance', skills: 'Skills', documents: 'Documents',
 };
 
@@ -112,6 +115,7 @@ const actions = {
       const c = s.checkin;
       if (c.date !== today) s.checkin = { date: today, in: hhmmNow(), out: null };
       else if (c.in && !c.out) c.out = hhmmNow();
+      s.punches[today] = { in: s.checkin.in, out: s.checkin.out };
     });
     const c = getState().checkin;
     toast(c.out ? `Checked out at ${c.out}` : `Checked in at ${c.in}`);
@@ -119,29 +123,61 @@ const actions = {
   regularize(el) {
     const date = el.dataset.date;
     update((s) => { s.regularizations[date] = 'pending'; });
-    toast(`Regularization sent to ${getEmp(ME_ID).manager}`);
+    const mgr = getEmp(ME_ID).manager;
+    toast(mgr ? `Regularization sent to ${mgr}` : 'Regularization request recorded');
   },
   approve(el) { decide(el.dataset.id, 'approved'); },
   reject(el) { decide(el.dataset.id, 'rejected'); },
   'month-prev'() { ui.timeMonth = addMonths(ui.timeMonth, -1); render(); },
   'month-next'() { if (ui.timeMonth < monthKey(new Date())) { ui.timeMonth = addMonths(ui.timeMonth, 1); render(); } },
-  'pay-select'(el) { ui.payKey = el.value; render(); },
+  'pay-row'(el) { ui.paySl = Number(el.dataset.sl); render(); },
+  'pay-filter'(el) { ui.payFilter = el.dataset.f; render(); },
+  async 'pay-map'(el) {
+    const sl = Number(el.dataset.sl);
+    try {
+      await mapRow(sl, el.value || null);
+      toast(el.value ? `Sl No ${sl} linked to ${el.value}` : `Sl No ${sl} unlinked`);
+    } catch (err) { toast(err.message, { type: 'error' }); render(); }
+  },
+  'payroll-lock'() { lockPayroll(); toast('Payroll locked'); },
+  'payroll-export-links'() {
+    const d = payrollData();
+    if (!d) return;
+    const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lines = [['Sl No', 'Employee code', "Employee's Name"].map(q).join(',')]
+      .concat(d.rows.map((r) => { const c = d.map[r.slNo]; return [r.slNo, c || '', c ? getEmp(c)?.name : ''].map(q).join(','); }));
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([lines.join('\r\n')], { type: 'text/csv' }));
+    a.download = `payroll-links-${d.month}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  },
+  'payroll-remove'() { $('#payroll-remove-dialog').showModal(); },
   'print-payslip'(el) {
-    const slip = buildPayslips().find((s) => s.key === el.dataset.key);
-    if (slip) printHtml(payslipHtml(slip));
+    const d = payrollData();
+    if (!d) return;
+    const row = d.rows.find((r) => r.slNo === Number(el.dataset.sl));
+    const code = row && d.map[row.slNo];
+    if (row && code) printHtml(payslipHtml(row, code, d.month, d.source));
   },
   policy() { const d = $('#policy-dialog'); $('#policy-body').innerHTML = policyDialogBody(); d.showModal(); },
   dept(el) { ui.peopleDept = el.dataset.dept; render(); },
   'req-tab'(el) { ui.reqTab = el.dataset.tab; render(); },
   'perf-select'(el) { ui.perfIdx = Number(el.dataset.idx); render(); },
+  'perf-emp'(el) { ui.perfEmp = el.value; ui.perfIdx = 0; render(); },
+  'skill-dept'(el) { ui.skillIdx = Number(el.dataset.idx); ui.skillPerson = null; render(); },
+  'skill-person'(el) { ui.skillPerson = ui.skillPerson === el.dataset.p ? null : el.dataset.p; render(); },
+  'skill-open'(el) { ui.skillIdx = Number(el.dataset.m); ui.skillPerson = el.dataset.p; },
   doc(el) {
     const key = el.dataset.key;
-    printHtml(letterHtml(key, buildPayslips()));
-    const title = { employment: 'Employment verification letter', 'salary-cert': 'Salary certificate', experience: 'Experience letter (preview)', form16: 'Form 16 (previous FY)' }[key];
+    if (!docAvailability(key).ok) return toast('Required details are not on file for this document.', { type: 'error' });
+    const d = payrollData();
+    printHtml(letterHtml(key, rowFor(ME_ID), d?.month));
+    const title = DOC_TYPES.find((t) => t.key === key).title;
     update((s) => { s.docsRequested.push({ title, date: todayISO() }); });
   },
   async install() { await pwa.promptInstall(); },
-  'reset-demo'() { $('#reset-dialog').showModal(); },
+  'reset-local'() { $('#reset-dialog').showModal(); },
 };
 
 function decide(id, status) {
@@ -177,7 +213,10 @@ document.addEventListener('submit', (e) => {
   if (!form) return;
   e.preventDefault();
   const data = Object.fromEntries(new FormData(form));
-  const handlers = { leave: submitLeave, advance: submitAdvance, permission: submitPermission, expense: submitExpense };
+  const handlers = {
+    leave: submitLeave, advance: submitAdvance, permission: submitPermission, expense: submitExpense,
+    'payroll-import': submitPayrollImport, 'payroll-unlock': submitPayrollUnlock,
+  };
   handlers[form.dataset.form]?.(form, data);
 });
 
@@ -198,7 +237,8 @@ function submitLeave(form, d) {
   update((s) => {
     s.leaves.push({ id: uid('L'), type: d.type, from: d.from, to: d.to, days, reason: (d.reason || '').trim(), status: 'pending' });
   });
-  toast(`Request for ${days} day${days > 1 ? 's' : ''} sent to ${getEmp(ME_ID).manager}`);
+  const mgr = getEmp(ME_ID).manager;
+  toast(`Request for ${days} day${days > 1 ? 's' : ''} ${mgr ? 'sent to ' + mgr : 'submitted'}`);
 }
 
 function submitAdvance(form, d) {
@@ -229,6 +269,24 @@ function submitExpense(form, d) {
   toast(`Expense of ₹${amount.toLocaleString('en-IN')} added`);
 }
 
+async function submitPayrollImport(form, d) {
+  const file = $('[name="file"]', form).files[0];
+  if (!file) return showError(form, 'Choose the payroll .json file.');
+  const btn = $('button[type="submit"]', form);
+  btn.disabled = true;
+  try {
+    await importPayroll(file, d.pass, d.pass2);
+    ui.paySl = null;
+    toast('Payroll imported and encrypted on this device');
+  } catch (err) { showError(form, err.message); } finally { btn.disabled = false; }
+}
+
+async function submitPayrollUnlock(form, d) {
+  const btn = $('button[type="submit"]', form);
+  btn.disabled = true;
+  try { await unlockPayroll(d.pass); } catch (err) { showError(form, err.message); btn.disabled = false; }
+}
+
 /* ------------------------------------------------------------ dialogs */
 document.addEventListener('click', (e) => {
   const closer = e.target.closest('[data-close]');
@@ -242,11 +300,23 @@ document.addEventListener('click', (e) => {
 $('#reset-confirm').addEventListener('click', () => {
   resetState();
   $('#reset-dialog').close();
-  toast('Demo data reset');
+  toast('Local records cleared');
+});
+$('#payroll-remove-confirm').addEventListener('click', () => {
+  removePayroll();
+  $('#payroll-remove-dialog').close();
+  toast('Payroll removed from this device');
 });
 
 /* ------------------------------------------------------------ boot */
 subscribe(() => render());
+onPayrollChange(() => render());
+// Lock payroll when the app is hidden for more than 5 minutes.
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) hiddenAt = Date.now();
+  else if (hiddenAt && Date.now() - hiddenAt > 5 * 60 * 1000 && payrollData()) { lockPayroll(); toast('Payroll locked after inactivity'); }
+});
 buildNav();
 initPWA(() => { if (parseHash().route === 'more') render(); });
 render();

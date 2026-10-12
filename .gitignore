@@ -3,3 +3,7 @@ dist/
 .DS_Store
 *.log
 __pycache__/
+
+# Salary data must never be committed or deployed
+private/
+*payroll*.json

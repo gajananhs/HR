@@ -1,19 +1,19 @@
 // Printable documents (payslip, letters). Rendered into a hidden iframe and sent to the
 // browser's print dialog, where "Save as PDF" is available on every platform.
+// Every figure and field comes from the supplied data; documents are disabled when a stated field is missing.
 
 import { esc, money, monthLabel, fmtLong, todayISO } from './utils.js';
-import { COMPANY, EMPLOYEES, ME_ID, SALARY } from './data.js';
-
-const me = () => EMPLOYEES.find((e) => e.id === ME_ID);
+import { COMPANY, ME_ID, byId } from './data.js';
+import { EARN_LABELS, DED_LABELS } from './payroll.js';
 
 const BASE_CSS = `
   @page{ size:A4; margin:18mm; }
   *{ box-sizing:border-box; }
   body{ font-family:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; color:#1D2B26; font-size:12.5px; line-height:1.55; }
-  h1{ font-family:Georgia,'Times New Roman',serif; font-size:22px; margin:0 0 2px; color:#16302C; }
+  h1{ font-family:Georgia,'Times New Roman',serif; font-size:20px; margin:0 0 2px; color:#16302C; }
   h2{ font-family:Georgia,'Times New Roman',serif; font-size:15px; margin:22px 0 8px; color:#16302C; }
   .muted{ color:#6c7f73; }
-  .head{ display:flex; justify-content:space-between; border-bottom:2px solid #16302C; padding-bottom:12px; margin-bottom:16px; }
+  .head{ display:flex; justify-content:space-between; gap:20px; border-bottom:2px solid #16302C; padding-bottom:12px; margin-bottom:16px; }
   table{ width:100%; border-collapse:collapse; }
   td,th{ padding:7px 6px; border-bottom:1px solid #E9E5D8; text-align:left; }
   td.r,th.r{ text-align:right; font-variant-numeric:tabular-nums; }
@@ -28,54 +28,51 @@ function wrap(title, body) {
 }
 
 function letterhead(subtitle) {
-  return `<div class="head"><div><h1>${esc(COMPANY.legal)}</h1><div class="muted">${esc(COMPANY.city)} · Sample company for demonstration only</div></div><div style="text-align:right"><strong>${esc(subtitle)}</strong><div class="muted">Issued ${esc(fmtLong(todayISO()))}</div></div></div>`;
+  return `<div class="head"><div><h1>${esc(COMPANY.legal)}</h1><div class="muted">${esc(COMPANY.address)}</div></div><div style="text-align:right"><strong>${esc(subtitle)}</strong><div class="muted">Issued ${esc(fmtLong(todayISO()))}</div></div></div>`;
 }
 
-export function payslipHtml(slip) {
-  const e = me();
-  const rows = [
-    ['Basic', SALARY.basic], ['House rent allowance', SALARY.hra], ['Medical allowance', SALARY.medical],
-    ['Conveyance', SALARY.conveyance], ['Special allowance', SALARY.special],
-  ];
-  const ded = [['Employee PF (12% of Basic)', slip.pf], ['Professional tax', SALARY.pt], ['TDS (as declared)', SALARY.tds]];
-  if (slip.lopAmt) ded.push([`Loss of pay (${slip.lop} day)`, slip.lopAmt]);
-  if (slip.advance) ded.push(['Salary advance recovery', slip.advance]);
-  const body = `${letterhead('Payslip — ' + monthLabel(slip.key))}
+const opt = (label, v) => (v ? `<div><span class="muted">${label}:</span> ${esc(v)}</div>` : '');
+
+/** Payslip for one wages-register row that has been linked to an employee code. */
+export function payslipHtml(row, code, month, source) {
+  const e = byId(code);
+  const earn = EARN_LABELS.filter(([k]) => row.earned[k]).map(([k, l]) => [l, row.earned[k]]);
+  const ded = DED_LABELS.filter(([k]) => row.ded[k]).map(([k, l]) => [l, row.ded[k]]);
+  const body = `${letterhead('Payslip — ' + monthLabel(month))}
     <div class="meta">
-      <div><span class="muted">Employee:</span> ${esc(e.name)}</div><div><span class="muted">Employee ID:</span> ${esc(e.id)}</div>
-      <div><span class="muted">Designation:</span> ${esc(e.role)}</div><div><span class="muted">Department:</span> ${esc(e.dept)}</div>
-      <div><span class="muted">Date of joining:</span> ${esc(fmtLong(e.joined))}</div><div><span class="muted">Pay days:</span> ${slip.payDays} of ${slip.days}</div>
+      <div><span class="muted">Employee:</span> ${esc(e.name)}</div><div><span class="muted">Employee code:</span> ${esc(e.id)}</div>
+      ${opt('Designation', e.role)}${opt('Department', e.dept)}
+      ${opt('Date of joining', row.doj && fmtLong(row.doj))}${opt('UAN', row.uan)}
+      <div><span class="muted">Pay days:</span> ${row.payDays ?? '—'} of ${row.wageDays ?? '—'}</div>${row.otHrs ? `<div><span class="muted">OT hours:</span> ${row.otHrs}</div>` : ''}
     </div>
     <h2>Earnings</h2>
-    <table>${rows.map(([n, v]) => `<tr><td>${esc(n)}</td><td class="r">${money(v)}</td></tr>`).join('')}
-    <tr class="total"><td>Gross earnings</td><td class="r">${money(slip.gross)}</td></tr></table>
+    <table>${earn.map(([n, v]) => `<tr><td>${esc(n)}</td><td class="r">${money(v)}</td></tr>`).join('')}
+    <tr class="total"><td>Gross salary</td><td class="r">${money(row.gross)}</td></tr></table>
     <h2>Deductions</h2>
     <table>${ded.map(([n, v]) => `<tr><td>${esc(n)}</td><td class="r">−${money(v)}</td></tr>`).join('')}
-    <tr class="total"><td>Net pay</td><td class="r">${money(slip.net)}</td></tr></table>
-    <p class="note">Employer PF contribution of ${money(slip.pf)} is part of CTC and does not reduce take-home pay. This is a computer-generated sample payslip containing fictional data.</p>`;
-  return wrap('Payslip ' + monthLabel(slip.key), body);
+    <tr class="total"><td>Total deductions</td><td class="r">−${money(row.totalDed)}</td></tr>
+    <tr class="total"><td>Net salary</td><td class="r">${money(row.net)}</td></tr></table>
+    <p class="note">Computer-generated from the ${esc(monthLabel(month))} register of wages (Sl No ${row.slNo}). Confidential.</p>`;
+  return wrap(`Payslip ${e.id} ${monthLabel(month)}`, body);
 }
 
-export function letterHtml(key, slips) {
-  const e = me();
-  const latest = slips[0];
+/** Letters for the signed-in employee. Callers must check docAvailability() first. */
+export function letterHtml(key, payRow, month) {
+  const e = byId(ME_ID);
   const titles = {
     employment: 'Employment verification letter',
     'salary-cert': 'Salary certificate',
     experience: 'Experience letter (preview)',
-    form16: 'Form 16 — summary (preview)',
   };
   const para = {
-    employment: `This is to certify that <strong>${esc(e.name)}</strong> (Employee ID ${esc(e.id)}) is employed with ${esc(COMPANY.legal)} as <strong>${esc(e.role)}</strong> in the ${esc(e.dept)} department since ${esc(fmtLong(e.joined))}. Employment status: ${esc(e.status)}.`,
-    'salary-cert': `This is to certify that <strong>${esc(e.name)}</strong> (Employee ID ${esc(e.id)}) is employed as ${esc(e.role)}. The monthly gross salary is <strong>${money(latest.gross)}</strong> and the most recent net pay (${esc(monthLabel(latest.key))}) was <strong>${money(latest.net)}</strong>.`,
-    experience: `This is a preview. An experience letter is issued on separation. It will confirm that <strong>${esc(e.name)}</strong> served as ${esc(e.role)} from ${esc(fmtLong(e.joined))} to the last working day.`,
-    form16: `Preview of tax deducted at source for <strong>${esc(e.name)}</strong>. Estimated annual TDS: <strong>${money(SALARY.tds * 12)}</strong>. The official Form 16 is generated by payroll after the financial year closes.`,
+    employment: `This is to certify that <strong>${esc(e.name)}</strong> (Employee code ${esc(e.id)}) is employed with ${esc(COMPANY.legal)} as <strong>${esc(e.role)}</strong> in the ${esc(e.dept)} department since ${esc(fmtLong(e.joined || ''))}.${e.status ? ` Employment status: ${esc(e.status)}.` : ''}`,
+    'salary-cert': payRow ? `This is to certify that <strong>${esc(e.name)}</strong> (Employee code ${esc(e.id)}) is employed with ${esc(COMPANY.legal)}. For ${esc(monthLabel(month))} the gross salary was <strong>${money(payRow.gross)}</strong> and the net salary was <strong>${money(payRow.net)}</strong>, as per the register of wages.` : '',
+    experience: `This is a preview. An experience letter is issued on separation. It will confirm that <strong>${esc(e.name)}</strong> served as ${esc(e.role)} from ${esc(fmtLong(e.joined || ''))} to the last working day.`,
   };
   const body = `${letterhead(titles[key])}
     <p>To whom it may concern,</p><p style="margin-top:14px">${para[key]}</p>
     <p style="margin-top:14px">This letter is issued at the employee's request for official purposes.</p>
-    <div class="sign"><div>Authorised signatory</div><div class="muted">Human Resources, ${esc(COMPANY.legal)}</div></div>
-    <p class="note">Sample document generated by the Quickair HR demo. All names and figures are fictional.</p>`;
+    <div class="sign"><div>Authorised signatory</div><div class="muted">Human Resources, ${esc(COMPANY.legal)}</div></div>`;
   return wrap(titles[key], body);
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "quickair-hr-pwa",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "description": "Quickair HR — installable HR dashboard PWA (static, GitHub Pages ready).",
   "type": "module",
@@ -9,7 +9,8 @@
     "check": "node scripts/check.mjs",
     "build": "node scripts/check.mjs && node scripts/build.mjs",
     "preview": "npx --yes serve@14 dist -l 8081",
-    "icons": "python3 scripts/generate-icons.py"
+    "icons": "python3 scripts/generate-icons.py",
+    "import": "python3 scripts/import-data.py"
   },
   "engines": { "node": ">=18" },
   "license": "MIT"

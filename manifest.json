@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Quickair HR — HR, timed right",
   "short_name": "Quickair HR",
-  "description": "Check in, request leave, view payslips, manage approvals and more.",
+  "description": "CAPL HR — employee directory, attendance, leave, skill matrices and restricted payroll.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
@@ -21,6 +21,6 @@
   "shortcuts": [
     { "name": "Attendance", "short_name": "Time", "url": "./index.html#/time", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Request leave", "short_name": "Leave", "url": "./index.html#/leave", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Payslips", "short_name": "Pay", "url": "./index.html#/pay", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+    { "name": "Payroll", "short_name": "Pay", "url": "./index.html#/pay", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
   ]
 }

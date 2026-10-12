@@ -1,6 +1,6 @@
 // Attendance + leave calculations for the signed-in employee (pure functions, no DOM).
 
-import { iso, parseISO, pad, seeded, daysInMonth, todayISO } from './utils.js';
+import { iso, parseISO, pad, daysInMonth, todayISO } from './utils.js';
 import { LEAVE_POLICY, holidayMap } from './data.js';
 
 const hMap = holidayMap();
@@ -32,23 +32,12 @@ function leaveOn(state, date) {
   return state.leaves.find((l) => l.status !== 'rejected' && date >= l.from && date <= l.to) || null;
 }
 
-/** The Nth working day before `fromISO` (Sunday and holidays skipped). */
-function workingDayBefore(fromISO, n) {
-  const d = parseISO(fromISO);
-  let left = n;
-  while (left > 0) {
-    d.setDate(d.getDate() - 1);
-    if (d.getDay() !== 0 && !hMap[iso(d)]) left--;
-  }
-  return iso(d);
-}
-
-const hhmm = (mins) => `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`;
+const toMin = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
 
 /**
- * What a single day looks like.
+ * What a single day looks like — built only from records made in this app (check-ins, leave, overrides).
  * Returns { code, in, out, hours, note, explicit }.
- *  code: P A CL SL EL OD H OFF R ? Q(regularization pending) - (future)
+ *  code: P A CL SL EL OD H OFF R ? Q(regularization pending) - (future / no record)
  */
 export function dayInfo(state, date) {
   const today = todayISO();
@@ -64,26 +53,22 @@ export function dayInfo(state, date) {
 
   if (date > today) return { code: '-', note: '' };
 
-  if (date === today) {
-    const c = state.checkin;
-    if (c.date === today && c.in) return { code: 'P', in: c.in, out: c.out, note: c.out ? '' : 'Working' };
-    return { code: '-', note: 'Not checked in yet' };
+  const punch = (state.punches || {})[date];
+  if (punch && punch.in) {
+    const worked = punch.out ? toMin(punch.out) - toMin(punch.in) : 0;
+    return {
+      code: 'P', in: punch.in, out: punch.out,
+      hours: worked > 0 ? worked : 0,
+      note: punch.out ? `${Math.floor(worked / 60)}h ${pad(worked % 60)}m` : (date === today ? 'Working' : 'No check-out recorded'),
+    };
   }
+  if (date === today) return { code: '-', note: 'Not checked in yet' };
+
+  // Before this device started recording there is simply no data — never fabricate presence.
+  if (date < (state.since || today)) return { code: '-', note: 'No record' };
 
   if (state.regularizations[date]) return { code: 'Q', note: 'Regularization pending' };
-
-  const currentMonth = date.slice(0, 7) === today.slice(0, 7);
-  // One recent day is always left unmarked so the "Regularize" flow is demonstrable.
-  const missing = currentMonth && (date === workingDayBefore(today, 3) || seeded('missing' + date) < 0.05);
-  if (missing) return { code: '?', note: 'No check-in recorded' };
-
-  const inMin = 9 * 60 + Math.floor(seeded('in' + date) * 28);
-  const outMin = 18 * 60 + Math.floor(seeded('out' + date) * 45);
-  const worked = outMin - inMin;
-  return {
-    code: 'P', in: hhmm(inMin), out: hhmm(outMin),
-    hours: worked, note: `${Math.floor(worked / 60)}h ${pad(worked % 60)}m`,
-  };
+  return { code: '?', note: 'No check-in recorded' };
 }
 
 /** Month roll-up used by the Time screen. */

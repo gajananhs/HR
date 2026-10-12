@@ -36,14 +36,6 @@ export const addMonths = (key, delta) => {
 
 export const initials = (name) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
 
-/** Deterministic pseudo-random number in [0,1) from a string — keeps mock data stable between visits. */
-export function seeded(str) {
-  let h = 2166136261;
-  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
-  h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995); h ^= h >>> 15;
-  return (h >>> 0) / 4294967296;
-}
-
 let toastHost;
 /** Show a transient message. `action` = { label, onClick } adds a button (used for SW updates). */
 export function toast(message, { type = 'info', action = null, ms = 3600 } = {}) {

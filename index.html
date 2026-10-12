@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Quickair HR</title>
-  <meta name="description" content="Quickair HR — check in, request leave, view payslips and manage approvals.">
+  <meta name="description" content="Quickair HR — CAPL employee directory, attendance, leave, skill matrices and restricted payroll.">
 
   <!-- PWA metadata (all paths are relative so the app works from any GitHub Pages subpath) -->
   <link rel="manifest" href="manifest.json">
@@ -34,7 +34,7 @@
       <nav class="nav" id="side-nav" aria-label="Main"></nav>
       <div class="side-foot">
         <div class="who" id="side-who"></div>
-        <span>v1.0 · demo data</span>
+        <span>v2.0 · CAPL data</span>
       </div>
     </aside>
 
@@ -58,11 +58,20 @@
   </dialog>
 
   <dialog id="reset-dialog" aria-labelledby="reset-title">
-    <h3 id="reset-title">Reset demo data?</h3>
-    <p>This clears check-ins, requests and expenses saved on this device and restores the original sample data.</p>
+    <h3 id="reset-title">Clear local records?</h3>
+    <p>This clears the check-ins, leave requests, advances, permissions and expenses saved on this device. Employee, skill and payroll data are not affected.</p>
     <div class="dialog-actions">
       <button class="btn-outline" data-close>Cancel</button>
-      <button class="btn-primary" id="reset-confirm">Reset</button>
+      <button class="btn-primary" id="reset-confirm">Clear</button>
+    </div>
+  </dialog>
+
+  <dialog id="payroll-remove-dialog" aria-labelledby="payroll-remove-title">
+    <h3 id="payroll-remove-title">Remove payroll from this device?</h3>
+    <p>The encrypted wages register and its Sl No → employee links are deleted from this device. Download the links first (Pay → Manage) if you want to keep them — you will need the payroll file to import again.</p>
+    <div class="dialog-actions">
+      <button class="btn-outline" data-close>Cancel</button>
+      <button class="btn-primary" id="payroll-remove-confirm">Remove</button>
     </div>
   </dialog>
 

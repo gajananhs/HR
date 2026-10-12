@@ -5,8 +5,10 @@ requests, KPI reviews, skill matrix, documents) into the **Meridian** design lan
 typography, cards, hero check-in, stat strip, ring, bars and bottom tab bar.
 
 * **100 % static** — plain HTML, CSS and ES modules. No framework, no bundler, no server.
-* **Mock data only** — every employee, payslip and figure is fictional and generated in `js/data.js`.
-  Changes you make (check-in, leave requests, expenses…) are stored in the browser's `localStorage`.
+* **CAPL data, no sample data** — the 53-employee master and 9 skill-matrix workbooks are imported by
+  `scripts/import-data.py`. Fields the sources don't contain show as *Not on file*; nothing is invented.
+* **Salary is never bundled** — HR imports the wages register on their own device; it is AES-encrypted with a
+  passcode before it is stored (see *Payroll* below). Check-ins and requests are stored in `localStorage`.
 * **Responsive** — phone: bottom tab bar · tablet: icon rail · desktop: full sidebar + multi-column layout.
 * **Full PWA** — manifest, service worker (pre-cache + runtime cache), offline fallback, update prompt, install prompt,
   maskable icons, theme colour, iOS meta tags, app shortcuts.
@@ -30,7 +32,10 @@ quickair-hr-pwa/
 ├── js/
 │   ├── app.js                  Entry: hash router, event delegation, forms
 │   ├── views.js                Screen templates (Home, Time, Leave, Pay, People, …)
-│   ├── data.js                 Mock employees, holidays, payroll structure, KPIs, skills
+│   ├── data.js                 Company, leave policy, holidays, KPI + skill helpers
+│   ├── data-employees.js       GENERATED — employee master (name + code)
+│   ├── data-skills.js          GENERATED — skill matrices, linked to employee codes
+│   ├── payroll.js              Encrypted on-device payroll import, unlock, Sl No → code links
 │   ├── attendance.js           Attendance + leave-balance calculations
 │   ├── store.js                Persisted state (localStorage, fail-safe)
 │   ├── docs.js                 Printable payslip / letters ("Save as PDF")
@@ -42,6 +47,7 @@ quickair-hr-pwa/
 ├── scripts/
 │   ├── check.mjs               Verifies precache list, manifest icons and imports
 │   ├── build.mjs               Copies to dist/ and stamps the service-worker cache id
+│   ├── import-data.py          Rebuilds the data files from CAPL's spreadsheets + validation report
 │   └── generate-icons.py       Regenerates all PNG icons (optional)
 ├── .github/workflows/deploy.yml  CI: check → build → deploy to GitHub Pages
 ├── package.json  .gitignore  LICENSE  README.md
@@ -56,13 +62,13 @@ quickair-hr-pwa/
 | `#/home` | Live clock + check-in / out, stat strip, team attendance bars, pending approvals (approve / reject), upcoming holidays & events |
 | `#/time` | Monthly attendance calendar (P, CL, SL, EL, H, OFF, ?), daily log, **Regularize** missed punches, team snapshot |
 | `#/leave` | Balance ring (CL / SL / EL), request form with validation, history, employment details, leave policy |
-| `#/pay` | Monthly payslip breakdown (PF, PT, TDS, LOP, advance recovery), history, PDF via print dialog |
+| `#/pay` | Restricted payroll: import + passcode, register exactly as in the wages sheet, link Sl No → employee code, payslip PDF |
 | `#/people`, `#/people/<id>` | Searchable directory with department filters and profile pages |
 | `#/requests` | Salary advance, late / early permission, expenses, approvals queue |
-| `#/performance` | KPI review periods with weighted scores |
-| `#/skills` | Skill matrix with level → target and development plan |
+| `#/performance` | KPI reviews with weighted scores (empty until KPI data is supplied) |
+| `#/skills` | Department skill matrices — Expected vs Current (1–4), gaps, competency % |
 | `#/documents` | Employment letter, salary certificate, etc. (print / save as PDF) |
-| `#/more` | Mobile menu, install button, reset demo data |
+| `#/more` | Mobile menu, install button, data status, clear local records |
 
 ---
 
@@ -172,11 +178,40 @@ toast; tapping it activates the new worker and reloads.
 
 ---
 
+## Data import (CAPL spreadsheets)
+
+```bash
+pip install openpyxl
+python3 scripts/import-data.py \
+  --master Emp_Name_With_ID.xlsx \
+  --salary salary_statement.xlsx \
+  --skills skill_matrix_*.xlsx ASSEMBLY_*.xlsx BALL_VALVE_*.xlsx CONVEYOR_*.xlsx \
+  --payroll-out ../private/payroll-YYYY-MM.json \
+  --report-out ../private/import-report.json
+```
+
+* Rewrites `js/data-employees.js` and `js/data-skills.js`, then bump `VERSION` in `service-worker.js`.
+* Skill-matrix names are linked to codes only when exactly one master employee matches; ambiguous or unknown
+  names stay unlinked and are listed in the report.
+* The payroll JSON and the report go **outside** the project. `.gitignore` blocks `private/` and `*payroll*.json`.
+
+## Payroll (restricted)
+
+1. Pay → choose the payroll `.json` → set a passcode (6+ characters) → **Import & encrypt**.
+2. The register has no employee names, so link each Sl No to an employee code (one code per row).
+   Links are stored inside the encrypted blob; **Download links (CSV)** exports Sl No / code / name only.
+3. Payroll auto-locks after 5 minutes in the background, or with **Lock**. A lost passcode cannot be recovered —
+   remove payroll from the device and import again.
+
+> Employee names, codes and skill ratings are still employee data. Host the app privately (behind the CAPL login
+> on Hostinger, or a private GitHub Pages site on an Enterprise plan) rather than on a public Pages URL.
+
 ## Customising
 
 | Want to change… | Edit |
 | --- | --- |
-| Employees, holidays, salary structure, KPIs, skills | `js/data.js` |
+| Employees, skills | Re-run `scripts/import-data.py` |
+| Holidays, KPI reviews (`KPI_REVIEWS`) | `js/data.js` |
 | Leave entitlement (CL / SL / EL) | `LEAVE_POLICY` in `js/data.js` |
 | Colours & typography | CSS variables at the top of `css/styles.css` |
 | App name / short name / theme colour | `manifest.json` and the `<meta>` tags in `index.html` |
@@ -185,8 +220,8 @@ toast; tapping it activates the new worker and reloads.
 
 ### Connecting a real backend later
 
-All reads/writes go through `js/store.js` and the view helpers. To connect the original PHP/MySQL API, replace the
-mock generators in `js/data.js` with `fetch()` calls and keep the service worker's network-first strategy for
+All reads/writes go through `js/store.js` and the view helpers. To connect the original PHP/MySQL API (Employee
+Master, salary slips, LOGBOOK attendance), replace the generated `js/data-*.js` modules with `fetch()` calls and keep the service worker's network-first strategy for
 `/api/` requests (add a rule in `fetch` for that path prefix).
 
 ---
@@ -211,8 +246,8 @@ Current Chrome, Edge, Firefox, Safari (iOS 16.4+ for install features) and Samsu
 | Old version still showing | DevTools → Application → Service Workers → *Unregister*, or accept the in-app update toast. |
 | "Install" not offered | Must be served over HTTPS (GitHub Pages is) and not already installed; Safari uses *Add to Home Screen*. |
 | Works locally, not after deploy | Run `npm run check`; a missing file in `PRECACHE` blocks service-worker installation. |
-| Want fresh demo data | **More → Reset demo data**, or clear site data in browser settings. |
+| Clear my check-ins / requests | **More → Clear my local records** (payroll is untouched). |
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE). All sample people, companies and figures are fictional.
+MIT — see [LICENSE](LICENSE). Employee data © Canares Automation Pvt. Ltd. — confidential.
