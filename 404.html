@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#16302C">
+  <title>Page not found · Quickair HR</title>
+  <link rel="icon" href="data:,">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#EDEAE2;color:#1D2B26;
+      font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+    .card{max-width:380px;width:100%;background:#fff;border:1px solid #E9E5D8;border-radius:24px;padding:32px 26px;text-align:center}
+    h1{font-family:Georgia,serif;font-size:22px;margin-bottom:8px}
+    p{font-size:13.5px;color:#5f776a;line-height:1.6;margin-bottom:22px}
+    a{display:block;background:#16302C;color:#FAF7F0;border-radius:12px;padding:13px;font-weight:600;font-size:14px;text-decoration:none}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Page not found</h1>
+    <p>That address doesn’t exist in Quickair HR. Head back to the dashboard.</p>
+    <a id="home" href="./">Open Quickair HR</a>
+  </main>
+  <script>
+    // GitHub Pages serves this file for unknown URLs at any depth, so a relative link can't be trusted.
+    // On a project site (user.github.io/<repo>/…) the first path segment is the repo name.
+    (function () {
+      var host = location.hostname;
+      var seg = location.pathname.split('/').filter(Boolean)[0];
+      var isProjectSite = /\.github\.io$/i.test(host) && seg && seg.toLowerCase() !== host.split('.')[0].toLowerCase() + '.github.io';
+      document.getElementById('home').setAttribute('href', isProjectSite ? '/' + seg + '/' : '/');
+    })();
+  </script>
+</body>
+</html>

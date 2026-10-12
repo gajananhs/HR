@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Quickair HR</title>
+  <meta name="description" content="Quickair HR — check in, request leave, view payslips and manage approvals.">
+
+  <!-- PWA metadata (all paths are relative so the app works from any GitHub Pages subpath) -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#16302C">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Quickair HR">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <a class="sr-only" href="#screen">Skip to content</a>
+
+  <div class="shell">
+    <aside class="sidebar" aria-label="Sidebar">
+      <div class="brand">
+        <img src="icons/icon-192.png" alt="" width="34" height="34">
+        <div><b>Quickair HR</b><small>HR, timed right</small></div>
+      </div>
+      <nav class="nav" id="side-nav" aria-label="Main"></nav>
+      <div class="side-foot">
+        <div class="who" id="side-who"></div>
+        <span>v1.0 · demo data</span>
+      </div>
+    </aside>
+
+    <div class="main">
+      <div class="net-banner" id="net-banner" role="status" hidden>You’re offline — showing saved data.</div>
+      <main class="screen" id="screen" tabindex="-1">
+        <div id="view"></div>
+        <noscript><p style="padding:24px">Quickair HR needs JavaScript to run.</p></noscript>
+      </main>
+      <nav class="tabbar" id="tabbar" aria-label="Primary"></nav>
+    </div>
+  </div>
+
+  <div class="toast-host" id="toasts" aria-live="polite"></div>
+
+  <dialog id="policy-dialog" aria-labelledby="policy-title">
+    <h3 id="policy-title">Leave policy</h3>
+    <p>Paid leave days per employee per calendar year. Leave taken beyond the balance is treated as loss of pay in the salary calculation.</p>
+    <div id="policy-body" style="margin-bottom:14px"></div>
+    <div class="dialog-actions"><button class="btn-primary" data-close>Got it</button></div>
+  </dialog>
+
+  <dialog id="reset-dialog" aria-labelledby="reset-title">
+    <h3 id="reset-title">Reset demo data?</h3>
+    <p>This clears check-ins, requests and expenses saved on this device and restores the original sample data.</p>
+    <div class="dialog-actions">
+      <button class="btn-outline" data-close>Cancel</button>
+      <button class="btn-primary" id="reset-confirm">Reset</button>
+    </div>
+  </dialog>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
