@@ -10,6 +10,33 @@ const ITER = 250000;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
+/* Statutory deductions (CAPL rule, applied to every register row on import and unlock):
+ *   PT  — ₹200 when monthly CTC ≥ ₹25,000, otherwise ₹0
+ *   EPF — fixed on a ₹25,000 wage base × 12 %   = ₹3,000, whatever the CTC
+ *   ESI — fixed on a ₹21,000 wage base × 0.75 % = ₹157.50 → ₹158 (ESIC rounds up), whatever the CTC
+ * Total deductions and net salary are recomputed from these. */
+export const PT_THRESHOLD = 25000;
+export const PT_AMOUNT = 200;
+export const PF_WAGE_BASE = 25000;
+export const PF_RATE = 0.12;
+export const ESI_WAGE_BASE = 21000;
+export const ESI_RATE = 0.0075;
+
+const r2 = (n) => Math.round(n * 100) / 100;
+
+export function applyStatutory(row) {
+  const ctc = Number(row.ctc ?? row.gross ?? 0);
+  const ded = { ...(row.ded || {}) };
+  ded.pt = ctc >= PT_THRESHOLD ? PT_AMOUNT : 0;
+  ded.epf = Math.round(PF_WAGE_BASE * PF_RATE);
+  ded.esi = Math.ceil(ESI_WAGE_BASE * ESI_RATE);
+  const totalDed = r2(Object.values(ded).reduce((a, v) => a + (Number(v) || 0), 0));
+  const gross = row.gross ?? null;
+  return { ...row, ded, pfWages: PF_WAGE_BASE, esiWages: ESI_WAGE_BASE, totalDed,
+    net: gross === null ? row.net : r2(Number(gross) - totalDed) };
+}
+const normalise = (data) => ({ ...data, rows: data.rows.map(applyStatutory) });
+
 let session = null; // { key, salt, data }  — only while unlocked
 const listeners = new Set();
 const emit = () => listeners.forEach((fn) => fn());
@@ -68,6 +95,7 @@ export async function importPayroll(file, pass, confirm) {
   // Keep an existing mapping for the same month if HR re-imports a corrected file.
   const prev = session && session.data.month === data.month ? session.data.map : null;
   data.map = { ...(data.map || {}), ...(prev || {}) }; // { slNo: 'CAPL_xxxx' } — manual links win
+  data = normalise(data);
   const salt = crypto.getRandomValues(new Uint8Array(16));
   session = { key: await deriveKey(pass, salt), salt, data };
   await persist();
@@ -84,6 +112,7 @@ export async function unlockPayroll(pass) {
     const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(s.iv) }, key, unb64(s.ct));
     data = JSON.parse(dec.decode(pt));
   } catch { throw new Error('Wrong passcode.'); }
+  data = normalise(data); // older stored files pick up the current PT / EPF / ESI rule
   session = { key, salt, data };
   emit();
 }
@@ -116,7 +145,7 @@ export const rowFor = (code) => {
   return sl ? session.data.rows.find((r) => String(r.slNo) === String(sl)) : null;
 };
 
-/** Labels in register order. Values are shown exactly as in the register — nothing is recalculated. */
+/** Labels in register order. Earnings are shown as in the register; ESI, EPF and PT come from applyStatutory(). */
 export const EARN_LABELS = [
   ['basicVda', 'Basic + VDA'], ['hra', 'HRA'], ['ca', 'Conveyance (CA)'], ['ma', 'Medical (MA)'], ['sa', 'Special allowance (SA)'],
   ['bonus', 'Bonus'], ['ot', 'Overtime'], ['attnBonus', 'Attendance bonus'], ['otherEarnings', 'Other earnings'],

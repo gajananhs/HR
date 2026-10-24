@@ -9,7 +9,7 @@
  * All URLs are resolved against the worker's scope, so the app works from any GitHub Pages subpath.
  * `BUILD` is replaced by scripts/build.mjs on every build so each deploy gets a fresh cache.
  */
-const VERSION = '2.0.0';
+const VERSION = '2.0.1';
 const BUILD = 'dev';
 const CACHE = `quickair-hr-shell-${VERSION}-${BUILD}`;
 const FONT_CACHE = 'quickair-hr-fonts-v1';
